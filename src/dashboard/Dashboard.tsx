@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Maximize2 from 'lucide-react/dist/esm/icons/maximize-2'
 import Volume2 from 'lucide-react/dist/esm/icons/volume-2'
 import Settings from 'lucide-react/dist/esm/icons/settings'
+import ExternalLink from 'lucide-react/dist/esm/icons/external-link'
 
 interface StreamInfo {
   tabId: number
@@ -13,6 +14,8 @@ const MAX_STREAMS = 12
 
 export default function Dashboard() {
   const [streams, setStreams] = useState<StreamInfo[]>([])
+  const [selectedOrder, setSelectedOrder] = useState<number[]>([])
+  const [draggingTabId, setDraggingTabId] = useState<number | null>(null)
   const streamsRef = useRef<StreamInfo[]>([])
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({})
   const pendingRemoteIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({})
@@ -25,6 +28,7 @@ export default function Dashboard() {
     chrome.storage.local.get(['selectedTabIds'], (result: { [key: string]: any }) => {
       const storedIds = Array.isArray(result.selectedTabIds) ? result.selectedTabIds.slice(0, MAX_STREAMS) : [];
       selectedTabIds.current = storedIds;
+      setSelectedOrder(storedIds);
       if (storedIds.length > 0) {
         chrome.runtime.sendMessage({ 
           type: 'START_STREAMS', 
@@ -76,6 +80,24 @@ export default function Dashboard() {
   }, [streams]);
 
   const getConnectionKey = (tabId: number, frameId: number) => `${tabId}:${frameId}`;
+
+  const reorderTabs = (sourceTabId: number, targetTabId: number) => {
+    if (sourceTabId === targetTabId) return
+
+    setSelectedOrder(prev => {
+      const base = prev.length > 0 ? [...prev] : visibleStreams.map(s => s.tabId)
+      const sourceIndex = base.indexOf(sourceTabId)
+      const targetIndex = base.indexOf(targetTabId)
+      if (sourceIndex < 0 || targetIndex < 0) return prev
+
+      base.splice(sourceIndex, 1)
+      base.splice(targetIndex, 0, sourceTabId)
+
+      selectedTabIds.current = base
+      chrome.storage.local.set({ selectedTabIds: base.slice(0, MAX_STREAMS) })
+      return base
+    })
+  }
 
   const queueRemoteIceCandidate = (connectionKey: string, candidate: RTCIceCandidateInit) => {
     if (!pendingRemoteIceCandidates.current[connectionKey]) {
@@ -221,7 +243,15 @@ export default function Dashboard() {
     return 'grid-cols-4 grid-rows-3'
   }
 
-  const visibleStreams = [...streams].sort((a,b) => a.tabId - b.tabId).slice(0, MAX_STREAMS)
+  const orderMap = new Map(selectedOrder.map((tabId, index) => [tabId, index]))
+  const visibleStreams = [...streams]
+    .sort((a, b) => {
+      const aOrder = orderMap.has(a.tabId) ? orderMap.get(a.tabId)! : Number.MAX_SAFE_INTEGER
+      const bOrder = orderMap.has(b.tabId) ? orderMap.get(b.tabId)! : Number.MAX_SAFE_INTEGER
+      if (aOrder !== bOrder) return aOrder - bOrder
+      return a.tabId - b.tabId
+    })
+    .slice(0, MAX_STREAMS)
 
   return (
     <div className="h-screen w-screen bg-black overflow-hidden flex flex-col">
@@ -233,7 +263,7 @@ export default function Dashboard() {
         </div>
       </header>
       
-      <main className={`flex-1 grid gap-1 p-1 ${gridClass()}`}>
+      <main className={`flex-1 grid gap-1 p-1 overflow-y-auto ${gridClass()}`}>
         {visibleStreams.length === 0 ? (
           <div className="col-span-full row-span-full flex items-center justify-center text-gray-500 flex-col gap-2">
             <p className="text-xl">Waiting for videos...</p>
@@ -241,7 +271,17 @@ export default function Dashboard() {
           </div>
         ) : (
           visibleStreams.map((s) => (
-            <VideoCell key={s.tabId} streamInfo={s} />
+            <VideoCell
+              key={s.tabId}
+              streamInfo={s}
+              onDragStart={() => setDraggingTabId(s.tabId)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                if (draggingTabId !== null) reorderTabs(draggingTabId, s.tabId)
+                setDraggingTabId(null)
+              }}
+              onDragEnd={() => setDraggingTabId(null)}
+            />
           ))
         )}
       </main>
@@ -249,7 +289,15 @@ export default function Dashboard() {
   )
 }
 
-function VideoCell({ streamInfo }: { streamInfo: StreamInfo }) {
+interface VideoCellProps {
+  streamInfo: StreamInfo
+  onDragStart: () => void
+  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void
+  onDrop: () => void
+  onDragEnd: () => void
+}
+
+function VideoCell({ streamInfo, onDragStart, onDragOver, onDrop, onDragEnd }: VideoCellProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -260,10 +308,31 @@ function VideoCell({ streamInfo }: { streamInfo: StreamInfo }) {
   }, [streamInfo.stream]);
 
   return (
-    <div className="relative bg-gray-900 group overflow-hidden border border-gray-800 flex items-center justify-center">
-      <div className="absolute top-2 left-2 z-10 bg-black/70 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap max-w-[90%] truncate">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className="relative bg-gray-900 group overflow-hidden border border-gray-800 flex items-center justify-center"
+    >
+      <div className="absolute top-2 left-2 z-10 bg-black/70 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap max-w-[90%] truncate">
         {streamInfo.title}
       </div>
+
+      <button
+        className="absolute top-2 right-2 z-10 p-1.5 bg-black/60 rounded text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
+        onClick={async () => {
+          try {
+            await chrome.tabs.update(streamInfo.tabId, { active: true });
+          } catch (error) {
+            console.error('Failed to open source tab:', error);
+          }
+        }}
+        title="Go to source tab"
+      >
+        <ExternalLink size={16} />
+      </button>
       
       <video 
         ref={videoRef}
