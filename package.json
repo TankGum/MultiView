@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
     "build": "node ./node_modules/vite/bin/vite.js build",
+    "package:zip": "npm run build && mkdir -p release && rm -f release/multiview-v$npm_package_version.zip && cd dist && zip -r ../release/multiview-v$npm_package_version.zip . -x \"*.DS_Store\"",
+    "release:check": "npm run typecheck && npm run build",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },

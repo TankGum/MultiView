@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Maximize2 from 'lucide-react/dist/esm/icons/maximize-2'
 import Volume2 from 'lucide-react/dist/esm/icons/volume-2'
-import Settings from 'lucide-react/dist/esm/icons/settings'
 import ExternalLink from 'lucide-react/dist/esm/icons/external-link'
+import GripVertical from 'lucide-react/dist/esm/icons/grip-vertical'
 
 interface StreamInfo {
   tabId: number
@@ -21,7 +21,7 @@ export default function Dashboard() {
   const pendingRemoteIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({})
   const activeSourceByTab = useRef<Record<number, { frameId: number; score: number }>>({})
   const selectedTabIds = useRef<number[]>([])
-  
+
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'REGISTER_DASHBOARD' });
 
@@ -30,8 +30,8 @@ export default function Dashboard() {
       selectedTabIds.current = storedIds;
       setSelectedOrder(storedIds);
       if (storedIds.length > 0) {
-        chrome.runtime.sendMessage({ 
-          type: 'START_STREAMS', 
+        chrome.runtime.sendMessage({
+          type: 'START_STREAMS',
           tabIds: storedIds
         });
       }
@@ -252,17 +252,41 @@ export default function Dashboard() {
       return a.tabId - b.tabId
     })
     .slice(0, MAX_STREAMS)
+  const selectedCount = Math.min(
+    selectedOrder.length > 0 ? selectedOrder.length : visibleStreams.length,
+    MAX_STREAMS
+  )
 
   return (
-    <div className="h-screen w-screen bg-black overflow-hidden flex flex-col">
-      <header className="px-4 py-2 bg-gray-900 flex justify-between items-center border-b border-gray-800 h-12">
-        <h1 className="text-lg font-bold text-blue-400">MultiView Dashboard</h1>
-        <div className="flex gap-4 items-center">
-          <span className="text-xs text-gray-500">{visibleStreams.length}/{MAX_STREAMS} active streams</span>
-          <Settings className="text-gray-400 cursor-pointer hover:text-white" size={20} />
+      <div className="h-screen w-screen bg-black overflow-hidden flex flex-col">
+      <header className="h-12 px-6 bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 border-b border-gray-800/50 backdrop-blur-sm flex items-center justify-between">
+        {/* Left section */}
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full"></div>
+          <p className="text-sm font-medium text-gray-300 tracking-tight">
+            Watch multiple tabs in one view
+          </p>
+        </div>
+
+        {/* Right section */}
+        <div className="flex items-center gap-4">
+          {/* Counter badge */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/30 backdrop-blur-sm hover:border-blue-500/50 transition-colors">
+            <span className="text-xs font-semibold text-blue-300 tracking-wide">
+              {selectedCount}/{MAX_STREAMS}
+            </span>
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+          </div>
+
+          {/* Drag hint */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800/40 hover:bg-gray-800/60 transition-colors">
+            <span className="text-xs font-medium text-gray-400 tracking-tight">
+              Tip: Drag tabs to reorder
+            </span>
+          </div>
         </div>
       </header>
-      
+
       <main className={`flex-1 grid gap-1 p-1 overflow-y-auto ${gridClass()}`}>
         {visibleStreams.length === 0 ? (
           <div className="col-span-full row-span-full flex items-center justify-center text-gray-500 flex-col gap-2">
@@ -333,23 +357,23 @@ function VideoCell({ streamInfo, onDragStart, onDragOver, onDrop, onDragEnd }: V
       >
         <ExternalLink size={16} />
       </button>
-      
-      <video 
+
+      <video
         ref={videoRef}
-        autoPlay 
-        playsInline 
+        autoPlay
+        playsInline
         muted={isMuted}
-        className="w-full h-full object-contain" 
+        className="w-full h-full object-contain"
       />
 
       <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button 
+        <button
           onClick={() => setIsMuted(!isMuted)}
           className="p-1.5 bg-black/60 rounded hover:bg-black/80 text-white"
         >
           <Volume2 size={16} className={isMuted ? 'text-red-500' : 'text-white'} />
         </button>
-        <button 
+        <button
           className="p-1.5 bg-black/60 rounded hover:bg-black/80 text-white"
           onClick={() => videoRef.current?.requestFullscreen()}
         >
