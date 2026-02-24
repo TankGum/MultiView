@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "MultiView Any Video",
+  "version": "1.0.0",
+  "description": "Watch multiple videos from different tabs simultaneously.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.ts"],
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["dashboard.html", "assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
